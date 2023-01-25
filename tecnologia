@@ -1,0 +1,125 @@
+#------------------------------
+#- INFORMAÇÕES SOBRE O SCRIPT -
+#------------------------------
+
+# Autor(a): Leonardo Fujisima Yada
+
+# Data de elaboração do script: 23.01.2023
+# Data da última atualização do scipt: 25.01.2023 
+
+#--------------------------
+#- CONFIGURAÇÕES INICIAIS -
+#--------------------------
+
+# Utilização de vírgula como separador de casas decimais
+
+options(OutDec = ",")
+
+# Diretório de trabalho
+
+getwd()                     # Verificação do diretório de trabalho atual
+setwd("OneDrive/PNADC/")    # Definição de diretório de trabalho
+
+# Bibliotecas utilizadas neste exercício
+
+library(PNADcIBGE)  # Tratamento dos arquivos da PnadC
+library(survey)     # Manipulação de dados de survey
+library(reshape2)   # Manipulação de dados
+
+#------------------------------------
+#- IMPORTAÇÃO E TRATAMENTO DE DADOS -
+#------------------------------------
+
+# Leitura de arquivo
+
+pnadc_4tri_tic_2019 <- PNADcIBGE::read_pnadc(
+  microdata="PNADC_2019_trimestre4.txt",
+  input_txt="https://ftp.ibge.gov.br/Trabalho_e_Rendimento/Pesquisa_Nacional_por_Amostra_de_Domicilios_continua/Anual/Microdados/Trimestre/Trimestre_4/Documentacao/input_PNADC_trimestre4_20221207.txt",
+  vars = c(
+    "UF"      ,    # Unidade da Federação
+    "V3002"   ,    # Frequenta ou não a escola
+    "V3002A"  ,    # Escola pública ou privada
+    "S07006"  ,    # Possui telefone móvel celular para uso próprio
+    "S07008"       # Principal motivo para não ter telefone móvel celular para uso pessoal
+  )
+  
+)
+
+pnadc_4tri_tic_2021 <- PNADcIBGE::read_pnadc(
+  microdata="PNADC_2021_trimestre4.txt",
+  input_txt="https://ftp.ibge.gov.br/Trabalho_e_Rendimento/Pesquisa_Nacional_por_Amostra_de_Domicilios_continua/Anual/Microdados/Trimestre/Trimestre_4/Documentacao/input_PNADC_trimestre4_20221207.txt",
+  vars = c(
+    "UF"      ,    # Unidade da Federação
+    "V3002"   ,    # Frequenta ou não a escola
+    "V3002A"  ,    # Escola pública ou privada
+    "S07006"  ,    # Possui telefone móvel celular para uso próprio
+    "S07008"       # Principal motivo para não ter telefone móvel celular para uso pessoal
+  )
+  
+)
+
+# Inclusão do Plano Amostral Complexo
+
+pnadc_4tri_tic_2019_PA <- pnadc_design(pnadc_4tri_tic_2019)
+pnadc_4tri_tic_2021_PA <- pnadc_design(pnadc_4tri_tic_2021)
+
+#--------------------
+#- ANÁLISE DE DADOS -
+#--------------------
+
+# Possui telefone móvel celular para uso próprio
+
+df_1_19 <- svyby(~V3002A, by=~S07006, subset(pnadc_4tri_tic_2019_PA, V3002=="1"), svytotal, na.rm=T)[, 1:3]
+df_1_21 <- svyby(~V3002A, by=~S07006, subset(pnadc_4tri_tic_2021_PA, V3002=="1"), svytotal, na.rm=T)[, 1:3]
+
+# Se não possui, qual é o principal motivo
+
+df_2_19 <- svyby(~V3002A, by=~S07008, subset(pnadc_4tri_tic_2019_PA, V3002=="1"), svytotal, na.rm=T)[, 1:3]
+df_2_21 <- svyby(~V3002A, by=~S07008, subset(pnadc_4tri_tic_2021_PA, V3002=="1"), svytotal, na.rm=T)[, 1:3]
+
+#-------------------------
+#- VISUALIZAÇÃO DE DADOS -
+#-------------------------
+
+# Possui telefone móvel celular para uso próprio
+
+# Reshape
+
+df_1_19 <- melt(df_1_19, id="S07006")
+df_1_19$year <- "2019"
+
+df_1_21 <- melt(df_1_21, id="S07006")
+df_1_21$year <- "2021"
+
+df_1 <- rbind(df_1_19, df_1_21)
+
+rm(df_1_19, df_1_21)
+
+# Conversão de variáveis em factor
+
+df_1$S07006 <- factor(x=df_1$S07006, levels=c("1","2"), labels=c("Sim","Não"))
+df_1$variable <- factor(x=df_1$variable, levels=c("V3002A1","V3002A2"), labels=c("Privada","Pública"))
+
+# Criação de variável com percentuais
+
+df_1 <- df_1 %>% group_by(variable, year) %>% summarise(S07006, perc=100*(value/sum(value))) 
+
+# Criação de gráfico
+
+ggplot(
+  data=subset(df_1, S07006=="Sim"), mapping=aes(x=variable, y=perc, fill=year)
+) +
+  geom_col(
+    position="dodge"
+  ) +
+  geom_text(
+    aes(label=round(perc, 1)), position=position_dodge(0.9), vjust=-1, size=5
+  ) +
+  theme(
+    axis.title = element_blank(),
+    legend.title = element_blank(), 
+    panel.background = element_blank(), 
+    text = element_text(size=17)
+  ) +
+  ylim(0,100)
+
